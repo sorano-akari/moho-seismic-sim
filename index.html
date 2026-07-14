@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Moho Seismic Simulator - Professional</title>
+    
+    <script>
+        window.goatcounter = { path: function(p) { return 'moho-pro' } };
+    </script>
+    <script data-goatcounter="https://sorano-akari-academy.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+
+    <style>
+        body, html {
+            margin: 0; padding: 0; overflow: hidden;
+            background-color: #020204;
+            font-family: 'Helvetica Neue', Arial, sans-serif; color: #e2e8f0;
+            height: 100vh; width: 100vw;
+            -webkit-user-select: none; user-select: none; touch-action: none;
+        }
+        
+        #app-container {
+            display: flex; flex-direction: column;
+            height: 100%; width: 100%;
+        }
+        
+        /* 上部：シミュレーション領域 */
+        #sim-panel {
+            flex: 5.5; position: relative;
+            background: linear-gradient(to bottom, #05050a 0%, #12121f 100%);
+            border-bottom: 2px solid #2e2e4f;
+            display: flex; justify-content: center; align-items: center;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            z-index: 5;
+        }
+        
+        /* 下部全体 */
+        #bottom-panel {
+            flex: 4.5; display: flex; flex-direction: row;
+            background-color: #0a0a0f;
+        }
+        
+        /* 左下：グラフ領域 */
+        #graph-wrapper {
+            flex: 7; position: relative;
+            display: flex; justify-content: center; align-items: center;
+            padding: 10px 20px;
+        }
+        
+        /* 右下：凡例・情報パネル */
+        #ui-wrapper {
+            flex: 3; background: #0d0d14;
+            border-left: 2px solid #1e1e2f;
+            padding: 20px 25px;
+            display: flex; flex-direction: column; justify-content: center;
+            box-shadow: -5px 0 20px rgba(0,0,0,0.5);
+            overflow-y: auto;
+        }
+
+        canvas {
+            max-width: 100%; max-height: 100%;
+            object-fit: contain; display: block;
+        }
+        #simCanvas { cursor: crosshair; }
+
+        /* UIテキストのスタイリング */
+        .ui-header { font-size: 18px; font-weight: 800; color: #4facfe; margin-bottom: 5px; letter-spacing: 1px; }
+        .ui-sub { font-size: 13px; color: #64748b; margin-bottom: 20px; font-weight: bold; }
+        
+        .legend-item { display: flex; align-items: center; margin-bottom: 12px; font-size: 14px; color: #cbd5e1; font-weight: 500; }
+        .legend-icon { width: 16px; height: 16px; border-radius: 50%; margin-right: 12px; border: 2px solid rgba(255,255,255,0.2); }
+        .legend-icon.pg { background: #ff4b4b; box-shadow: 0 0 10px rgba(255, 75, 75, 0.5); }
+        .legend-icon.pmp { background: #4facfe; box-shadow: 0 0 10px rgba(79, 172, 254, 0.5); }
+        .legend-icon.pn { background: #00e676; box-shadow: 0 0 10px rgba(0, 230, 118, 0.5); }
+        
+        /* トグルスイッチのスタイリング */
+        .toggle-container {
+            display: flex; align-items: center; justify-content: space-between;
+            background: rgba(255,255,255,0.05); padding: 12px 15px;
+            border-radius: 8px; margin-top: 10px; margin-bottom: 15px;
+            cursor: pointer; border: 1px solid rgba(255,255,255,0.1);
+            transition: 0.2s;
+        }
+        .toggle-container:hover { background: rgba(255,255,255,0.1); }
+        .toggle-label { font-size: 13px; font-weight: bold; color: #fff; }
+        .toggle-switch {
+            width: 44px; height: 24px; background: #333; border-radius: 12px;
+            position: relative; transition: 0.3s;
+        }
+        .toggle-switch::after {
+            content: ''; position: absolute; top: 3px; left: 3px;
+            width: 18px; height: 18px; background: #fff; border-radius: 50%;
+            transition: 0.3s; box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+        .toggle-switch.active { background: #4facfe; box-shadow: 0 0 10px rgba(79, 172, 254, 0.5); }
+        .toggle-switch.active::after { transform: translateX(20px); }
+
+        .action-box {
+            margin-top: auto; padding: 15px; border-radius: 8px;
+            background: rgba(79, 172, 254, 0.1); border: 1px solid rgba(79, 172, 254, 0.3);
+            font-size: 13px; color: #4facfe; text-align: center; font-weight: bold;
+            animation: pulse-border 2s infinite;
+        }
+
+        #floating-instruction {
+            position: absolute; top: 30px; left: 50%; transform: translateX(-50%);
+            font-size: 16px; color: rgba(255,255,255,0.8); font-weight: bold; pointer-events: none;
+            letter-spacing: 2px; transition: opacity 0.5s; text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+        }
+
+        @keyframes pulse-border {
+            0% { border-color: rgba(79, 172, 254, 0.3); box-shadow: 0 0 0 rgba(79, 172, 254, 0); }
+            50% { border-color: rgba(79, 172, 254, 0.8); box-shadow: 0 0 15px rgba(79, 172, 254, 0.3); }
+            100% { border-color: rgba(79, 172, 254, 0.3); box-shadow: 0 0 0 rgba(79, 172, 254, 0); }
+        }
+
+        @media (max-width: 768px) {
+            #bottom-panel { flex-direction: column; }
+            #graph-wrapper { flex: 5; padding: 10px 5px; }
+            #ui-wrapper { flex: 5; border-left: none; border-top: 2px solid #1e1e2f; padding: 15px; }
+            .ui-header { font-size: 16px; }
+            .legend-item { font-size: 13px; margin-bottom: 8px; }
+            .toggle-container { padding: 10px; margin-top: 5px; margin-bottom: 10px; }
+            .action-box { padding: 10px; font-size: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="app-container">
+    <div id="sim-panel">
+        <div id="floating-instruction">地球表面（青い線）のすぐ下をタップ</div>
+        <canvas id="simCanvas"></canvas>
+    </div>
+
+    <div id="bottom-panel">
+        <div id="graph-wrapper">
+            <canvas id="graphCanvas"></canvas>
+        </div>
+        <div id="ui-wrapper">
+            <div>
+                <div class="ui-header">MOHO SEISMIC SIMULATOR</div>
+                <div class="ui-sub">走時曲線と地震波の伝播プロセス</div>
+                
+                <div class="legend-item"><div class="legend-icon pg"></div>直接波 (Pg) - 地殻内を伝播</div>
+                <div class="legend-item"><div class="legend-icon pmp"></div>反射波 (PmP) - モホ面で全反射</div>
+                <div class="legend-item"><div class="legend-icon pn"></div>屈折波 (Pn) - マントルで加速</div>
+                
+                <div class="toggle-container" id="envelope-toggle">
+                    <span class="toggle-label">初動走時曲線を表示</span>
+                    <div class="toggle-switch"></div>
+                </div>
+            </div>
+            <div class="action-box">
+                ▲ シミュレーション領域の地殻内を<br>タップして地震を発生させます
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const simCanvas = document.getElementById('simCanvas');
+const simCtx = simCanvas.getContext('2d');
+const graphCanvas = document.getElementById('graphCanvas');
+const graphCtx = graphCanvas.getContext('2d');
+
+const LOGICAL_WIDTH = 1600;
+const LOGICAL_HEIGHT = 550; 
+simCanvas.width = LOGICAL_WIDTH; simCanvas.height = LOGICAL_HEIGHT;
+
+const GRAPH_WIDTH = 1000; 
+const GRAPH_HEIGHT = 450;
+graphCanvas.width = GRAPH_WIDTH; graphCanvas.height = GRAPH_HEIGHT; 
+
+const cx = LOGICAL_WIDTH / 2;
+const R_surface = 1200;          
+const cy = R_surface + 120; 
+const crust_thickness = 100;     
+const R_moho = R_surface - crust_thickness;
+
+const v1 = 2.0; const v2 = 6.0;                  
+
+let epicenter = null; 
+let rays = []; let arrivalPoints = []; let sparks = []; 
+let isSimulating = false; let maxDist = 10; let maxTime = 10;
+let showEnvelope = false; // デフォルトOFF
+
+document.getElementById('envelope-toggle').addEventListener('click', function() {
+    showEnvelope = !showEnvelope;
+    this.querySelector('.toggle-switch').classList.toggle('active', showEnvelope);
+    if (!isSimulating && arrivalPoints.length > 0) {
+        drawGraph();
+    }
+});
+
+function refract(I, N, eta) {
+    const idotn = I.x * N.x + I.y * N.y;
+    const k = 1.0 - eta * eta * (1.0 - idotn * idotn);
+    if (k < 0.0) return null; 
+    const mu = eta * idotn + Math.sqrt(k);
+    return { x: eta * I.x - mu * N.x, y: eta * I.y - mu * N.y };
+}
+
+class SeismicRay {
+    constructor(sx, sy, angle) {
+        this.x = sx; this.y = sy;
+        this.vx = Math.cos(angle) * v1; this.vy = Math.sin(angle) * v1;
+        const dist = Math.hypot(this.x - cx, this.y - cy);
+        
+        this.layer = dist > R_moho ? 'crust' : 'mantle';
+        this.type = 'Pg'; 
+        
+        if(this.layer === 'mantle') { this.vx = Math.cos(angle) * v2; this.vy = Math.sin(angle) * v2; }
+        this.history = [{x: this.x, y: this.y}];
+        this.active = true; this.travelTime = 0;
+    }
+
+    update() {
+        if (!this.active) return;
+        const steps = 2; 
+        for(let i=0; i<steps; i++){
+            this.x += this.vx / steps; this.y += this.vy / steps;
+            this.travelTime += 1 / steps;
+
+            const dx = this.x - cx; const dy = this.y - cy;
+            const dist = Math.hypot(dx, dy);
+            const nx = dx / dist; const ny = dy / dist;
+
+            if (this.layer === 'crust' && dist < R_moho) {
+                const I = { x: this.vx / v1, y: this.vy / v1 };
+                const R = refract(I, { x: nx, y: ny }, v2 / v1); 
+                if (R) {
+                    this.vx = R.x * v2; this.vy = R.y * v2;
+                    this.layer = 'mantle'; this.type = 'Pn'; 
+                } else {
+                    const dot = this.vx * nx + this.vy * ny;
+                    this.vx -= 2 * dot * nx; this.vy -= 2 * dot * ny;
+                    this.type = 'PmP'; this.x += nx * 2; this.y += ny * 2;
+                }
+            }
+            else if (this.layer === 'mantle' && dist > R_moho) {
+                const I = { x: this.vx / v2, y: this.vy / v2 };
+                const R = refract(I, { x: -nx, y: -ny }, v1 / v2); 
+                if (R) {
+                    this.vx = R.x * v1; this.vy = R.y * v1;
+                    this.layer = 'crust'; this.x += nx * 2; this.y += ny * 2;
+                }
+            }
+
+            if (dist >= R_surface) {
+                this.active = false;
+                if (this.travelTime > 5) {
+                    const epiAngle = Math.atan2(epicenter.y - cy, epicenter.x - cx);
+                    const currentAngle = Math.atan2(this.y - cy, this.x - cx);
+                    let diffAngle = Math.abs(currentAngle - epiAngle);
+                    if (diffAngle > Math.PI) diffAngle = Math.PI * 2 - diffAngle;
+                    
+                    const distanceKm = diffAngle * R_surface * 0.1; 
+                    arrivalPoints.push({ distance: distanceKm, time: this.travelTime * 0.1, type: this.type });
+                    if (distanceKm > maxDist) maxDist = distanceKm;
+                    if (this.travelTime * 0.1 > maxTime) maxTime = this.travelTime * 0.1;
+                    createSparks(this.x, this.y, this.type);
+                }
+                break;
+            }
+            if (this.x < -200 || this.x > LOGICAL_WIDTH + 200 || this.y > LOGICAL_HEIGHT + 200) { this.active = false; break; }
+        }
+        if (this.active || this.history.length < 2) {
+            if (Math.random() < 0.3 || !this.active) this.history.push({x: this.x, y: this.y});
+        }
+    }
+}
+
+function createSparks(x, y, type) {
+    let color = '#ff4b4b'; if (type === 'PmP') color = '#4facfe'; if (type === 'Pn') color = '#00e676'; 
+    for(let i=0; i<6; i++) {
+        sparks.push({ x: x, y: y, vx: (Math.random() - 0.5) * 6, vy: (Math.random() - 0.5) * 6 - 2, alpha: 1, color: color });
+    }
+}
+
+function triggerEarthquake(e) {
+    e.preventDefault();
+    const rect = simCanvas.getBoundingClientRect();
+    const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+    const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+    const scaleX = simCanvas.width / rect.width;
+    const scaleY = simCanvas.height / rect.height;
+    const clickX = (clientX - rect.left) * scaleX;
+    const clickY = (clientY - rect.top) * scaleY;
+
+    const dx = clickX - cx; const dy = clickY - cy;
+    const dist = Math.hypot(dx, dy);
+    
+    if (dist > R_surface || dist < R_moho) return;
+
+    document.getElementById('floating-instruction').style.opacity = '0';
+
+    epicenter = { x: clickX, y: clickY };
+    rays = []; arrivalPoints = []; sparks = [];
+    maxDist = 10; maxTime = 10; isSimulating = true;
+
+    const numRays = 1800; 
+    for (let i = 0; i < numRays; i++) rays.push(new SeismicRay(clickX, clickY, (i * Math.PI * 2) / numRays));
+}
+simCanvas.addEventListener('pointerdown', triggerEarthquake);
+
+function drawBackground() {
+    simCtx.beginPath(); simCtx.arc(cx, cy, R_surface, 0, Math.PI * 2);
+    simCtx.fillStyle = '#0a0d14'; simCtx.fill();
+
+    simCtx.beginPath(); simCtx.arc(cx, cy, R_moho, 0, Math.PI * 2);
+    simCtx.fillStyle = '#05070a'; simCtx.fill();
+
+    simCtx.beginPath(); simCtx.arc(cx, cy, R_moho, 0, Math.PI * 2);
+    simCtx.strokeStyle = 'rgba(234, 179, 8, 0.3)'; simCtx.lineWidth = 1.5;
+    simCtx.setLineDash([4, 4]); simCtx.stroke(); simCtx.setLineDash([]);
+
+    simCtx.beginPath(); simCtx.arc(cx, cy, R_surface, 0, Math.PI * 2);
+    simCtx.strokeStyle = 'rgba(79, 172, 254, 0.8)'; simCtx.lineWidth = 2;
+    simCtx.shadowColor = '#4facfe'; simCtx.shadowBlur = 15; 
+    simCtx.stroke();
+    simCtx.shadowBlur = 0; 
+}
+
+function drawRaysBatch() {
+    simCtx.lineWidth = 1.2;
+    simCtx.globalCompositeOperation = 'screen'; 
+    const colors = { 'Pg': 'rgba(255, 75, 75, 0.25)', 'PmP': 'rgba(79, 172, 254, 0.25)', 'Pn': 'rgba(0, 230, 118, 0.35)' };
+
+    for (const [type, color] of Object.entries(colors)) {
+        simCtx.beginPath(); simCtx.strokeStyle = color;
+        for(let r of rays) {
+            if(r.type === type && r.history.length > 1) {
+                simCtx.moveTo(r.history[0].x, r.history[0].y);
+                for(let i=1; i<r.history.length; i++) simCtx.lineTo(r.history[i].x, r.history[i].y);
+            }
+        }
+        simCtx.stroke();
+    }
+
+    simCtx.beginPath(); simCtx.fillStyle = 'rgba(255,255,255,0.7)';
+    for(let r of rays) {
+        if(r.active) { simCtx.moveTo(r.x, r.y); simCtx.arc(r.x, r.y, 1.2, 0, Math.PI * 2); }
+    }
+    simCtx.fill();
+    simCtx.globalCompositeOperation = 'source-over';
+}
+
+function getInterpolatedY(x, sortedArr) {
+    if (sortedArr.length === 0) return Infinity;
+    if (x <= sortedArr[0].distance) return sortedArr[0].time;
+    if (x >= sortedArr[sortedArr.length - 1].distance) return Infinity; 
+    for (let i = 0; i < sortedArr.length - 1; i++) {
+        let p1 = sortedArr[i], p2 = sortedArr[i+1];
+        if (x >= p1.distance && x <= p2.distance) {
+            if (p2.distance === p1.distance) return p1.time;
+            return p1.time + (x - p1.distance) / (p2.distance - p1.distance) * (p2.time - p1.time);
+        }
+    }
+    return Infinity;
+}
+
+function drawGraph() {
+    graphCtx.clearRect(0, 0, GRAPH_WIDTH, GRAPH_HEIGHT);
+    const paddingX = 60; const paddingY = 50;
+    const gW = GRAPH_WIDTH - paddingX * 2; const gH = GRAPH_HEIGHT - paddingY * 2;
+
+    graphCtx.strokeStyle = '#4a4a6f'; graphCtx.lineWidth = 4;
+    graphCtx.beginPath(); graphCtx.moveTo(paddingX, paddingY); graphCtx.lineTo(paddingX, paddingY + gH); graphCtx.lineTo(paddingX + gW, paddingY + gH); graphCtx.stroke();
+
+    graphCtx.fillStyle = '#cbd5e1'; graphCtx.font = 'bold 16px sans-serif';
+    graphCtx.fillText('到達時間 (Time) →', paddingX, paddingY - 15);
+    graphCtx.fillText('震央からの距離 (Distance) →', paddingX + gW - 220, paddingY + gH + 30);
+
+    if (arrivalPoints.length === 0) return;
+    const scaleX = gW / (maxDist * 1.05); const scaleY = gH / (maxTime * 1.05);
+
+    const pts = { 'Pg': [], 'PmP': [], 'Pn': [] };
+    for(let p of arrivalPoints) pts[p.type].push(p);
+    for(let key in pts) pts[key].sort((a, b) => a.distance - b.distance);
+
+    if (showEnvelope) {
+        graphCtx.beginPath();
+        graphCtx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+        graphCtx.lineWidth = 8;
+        graphCtx.lineCap = 'round'; graphCtx.lineJoin = 'round';
+        graphCtx.shadowColor = 'rgba(255, 255, 255, 0.7)'; graphCtx.shadowBlur = 12;
+
+        let firstPoint = true;
+        for (let d = 0; d <= maxDist; d += maxDist / 200) {
+            let t_pg = getInterpolatedY(d, pts['Pg']);
+            let t_pn = getInterpolatedY(d, pts['Pn']);
+            let min_t = Math.min(t_pg, t_pn); 
+            
+            if (min_t < Infinity) {
+                const x = paddingX + d * scaleX; const y = paddingY + gH - min_t * scaleY;
+                if (firstPoint) { graphCtx.moveTo(x, y); firstPoint = false; }
+                else { graphCtx.lineTo(x, y); }
+            }
+        }
+        graphCtx.stroke();
+        graphCtx.shadowBlur = 0; 
+    }
+
+    // ONの時は線を半透明にし、初動走時曲線のハイライトを引き立たせる
+    const opacity = showEnvelope ? 0.3 : 1.0;
+    const lineColors = { 
+        'PmP': `rgba(79, 172, 254, ${opacity})`, 
+        'Pn': `rgba(0, 230, 118, ${opacity})`, 
+        'Pg': `rgba(255, 75, 75, ${opacity})` 
+    };
+    
+    for (let type of ['PmP', 'Pn', 'Pg']) {
+        const arr = pts[type]; if(arr.length === 0) continue;
+        
+        graphCtx.beginPath(); 
+        graphCtx.strokeStyle = lineColors[type]; 
+        graphCtx.lineWidth = 3.5;
+        graphCtx.lineCap = 'round'; graphCtx.lineJoin = 'round';
+        
+        for (let i = 0; i < arr.length; i++) {
+            const x = paddingX + arr[i].distance * scaleX; const y = paddingY + gH - arr[i].time * scaleY;
+            if (i === 0) graphCtx.moveTo(x, y); else graphCtx.lineTo(x, y);
+        }
+        graphCtx.stroke();
+    }
+}
+
+function updateSparks() {
+    simCtx.globalCompositeOperation = 'screen';
+    for(let i = sparks.length - 1; i >= 0; i--) {
+        let s = sparks[i]; s.x += s.vx; s.y += s.vy; s.alpha -= 0.03;
+        if(s.alpha <= 0) { sparks.splice(i, 1); } 
+        else {
+            simCtx.beginPath(); simCtx.arc(s.x, s.y, 3.5, 0, Math.PI * 2);
+            simCtx.fillStyle = s.color; simCtx.globalAlpha = s.alpha; simCtx.fill(); simCtx.globalAlpha = 1.0;
+        }
+    }
+    simCtx.globalCompositeOperation = 'source-over';
+}
+
+function loop() {
+    simCtx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
+    drawBackground();
+
+    if (isSimulating) {
+        rays.forEach(r => r.update());
+        if (rays.every(r => !r.active) && sparks.length === 0) isSimulating = false;
+    }
+    
+    if (rays.length > 0) drawRaysBatch();
+    
+    updateSparks(); drawGraph();
+    requestAnimationFrame(loop);
+}
+
+loop();
+</script>
+
+</body>
+</html>
